@@ -52,7 +52,9 @@ class ParserX extends Parser {
       }
       this.end = this.begin + this.current.alternatives[0].content.length;
     }
-    throw new AnalysisError(`failed to find begin time with offset = ${offset}`);
+    // Peter
+    //throw new AnalysisError(`failed to find begin time with offset = ${offset}`);
+    return 0;
   }
 
   offsetToEndTime(offset) {
@@ -72,7 +74,9 @@ class ParserX extends Parser {
       }
       this.end = this.begin + this.current.alternatives[0].content.length;
     }
-    throw new AnalysisError(`failed to find end time with offset = ${offset}`);
+    // Peter
+    //throw new AnalysisError(`failed to find end time with offset = ${offset}`);
+    return 0;
   }
 }
 

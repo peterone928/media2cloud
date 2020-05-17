@@ -57,7 +57,7 @@ class BaseComprehend extends BaseAnalysis {
     return {
       PartSize: {
         UpperBound: 5000,
-        LowerBound: 2500,
+        LowerBound: 1000,
       },
       MinFileSize: 10,
       SlicesPerProcess: 25,
@@ -385,8 +385,13 @@ class BaseComprehend extends BaseAnalysis {
 
     const slices = this.sliceTranscriptResults(transcript);
 
-    const languageCode =
+    let languageCode =
       (this.stateData.input.aiOptions.languageCode || 'en').slice(0, 2);
+
+    // Peter 20200514 - Let german be cantonese/trad chinese
+    if(languageCode === 'de') {
+      languageCode = 'zh-TW';
+    }
 
     let timecodes = [];
     let results = [];
@@ -542,6 +547,11 @@ class BaseComprehend extends BaseAnalysis {
    * @description download json transcript
    */
   async downloadJsonTranscript() {
+    // Peter
+    if((this.stateData.input.aiOptions.languageCode || 'en').slice(0, 2) === 'de') {
+      return {};
+    }
+
     const bucket = Environment.Proxy.Bucket;
     const data = this.stateData.input.transcribe || {};
 

@@ -187,7 +187,9 @@ class Transcribe extends BaseAnalysis {
       throw new AnalysisError('missing input.aiOptions');
     }
 
-    const name = this.makeUniqueJobName();
+    // Peter 20200514
+    const uniqueName = this.makeUniqueJobName();
+    let name = uniqueName;
 
     const params = {
       LanguageCode: aiOptions.languageCode || 'en-US',
@@ -198,19 +200,101 @@ class Transcribe extends BaseAnalysis {
       TranscriptionJobName: name,
     };
 
-    /* optional: set vocabulary */
-    if ((await this.useCustomVocabulary(aiOptions.customVocabulary, params.LanguageCode))) {
-      params.Settings = {
-        VocabularyName: aiOptions.customVocabulary,
-      };
-    }
+    // Peter 20200514 - treat german as cantonese
+    if (aiOptions.languageCode.slice(0, 2) === 'de') {
+      name = 'google-speech-job';
+      console.log('running ' + name);
+      /*
+      const AWS = require('aws-sdk');
+      const fs = require('fs');
+      const s3 = new AWS.S3({
+        apiVersion: '2006-03-01',
+        signatureVersion: 'v4',
+      });
+      const s3Bucket = Environment.Proxy.Bucket;
+      const s3Key = ((this.stateData.input || {}).audio || {}).key;
 
-    const response = await this.retryStartTranscriptionJob(params);
-    const status =
-      Transcribe.TranscribeStatusMapping[response.TranscriptionJob.TranscriptionJobStatus];
+      console.log('Audio wave file S3 key: ' + s3Key);
 
-    if (status === StateData.Statuses.Error) {
-      throw new AnalysisError(response.TranscriptionJob.FailureReason);
+      let localFile = fs.createWriteStream('/tmp/' + s3Key);
+
+      s3.getObject({
+        s3Bucket,
+        s3Key,
+      }).createReadStream()
+      .pipe(localFile);
+
+      // Peter - get google auth json++
+      let gcpKeyFile = fs.createWriteStream('/tmp/' + 'gcpKey');
+      let gcpS3Bucket = 'media2cloud-peter';
+      let gcpS3Key = 'google/rocktracking-82e2283912da.json';
+      s3.getObject({
+        gcpS3Bucket,
+        gcpS3Key,
+      }).createReadStream()
+      .pipe(gcpKeyFile);
+
+      const gcpAccountId = 259801262735;
+      const gcpAuthJson = '/tmp/' + 'gcpKey';
+      // Peter - end--
+
+      const { Storage } = require('@google-cloud/storage');
+      const storage = new Storage({
+        gcpAccountId, gcpAuthJson
+      });
+      const gcsBucket = storage.bucket('aws-media');
+
+      gcsBucket.uploadAsync('/tmp/' + s3Key, { public: false })
+        .then(file => {
+          console.log('file: ' + s3Key + ' uploaded success to Google Cloud Storage!');
+
+          const speech = require('@google-cloud/speech');
+          const speechClient = new speech.SpeechClient({
+            gcpAccountId, gcpAuthJson
+          });
+          const gcsUri = 'gs://aws-media/' + s3Key;
+          const audio = {
+            uri: gcsUri,
+          };
+          const config = {
+            //encoding: 'LINEAR16',
+            //sampleRateHertz: 16000,
+            languageCode: 'zh-HK'
+          };
+          const request = {
+            audio: audio,
+            config: config
+          };
+
+          const [operation] = await speechClient.longRunningRecognize(request);
+
+          name = JSON.stringify(operation.name);
+          console.log('Google speech to text job ID: ' + name);
+        })
+        .catch(err => {
+          console.error('file uploaded failed to Google Cloud Storage!');
+          throw new Error(err);
+        });
+
+        */
+
+    } else {
+      
+      /* optional: set vocabulary */
+      if ((await this.useCustomVocabulary(aiOptions.customVocabulary, params.LanguageCode))) {
+        params.Settings = {
+          VocabularyName: aiOptions.customVocabulary,
+        };
+      }
+
+      const response = await this.retryStartTranscriptionJob(params);
+      const status =
+        Transcribe.TranscribeStatusMapping[response.TranscriptionJob.TranscriptionJobStatus];
+
+      if (status === StateData.Statuses.Error) {
+        throw new AnalysisError(response.TranscriptionJob.FailureReason);
+      }
+
     }
 
     this.stateData.setData(Transcribe.Keyword, {
@@ -231,7 +315,17 @@ class Transcribe extends BaseAnalysis {
 
     if (!name) {
       throw new AnalysisError(`missing input.${Transcribe.Keyword}.name`);
-    }
+
+    // Peter 20200514
+    } else if (name.includes('google')) {
+      this.stateData.setData(Transcribe.Keyword, {
+        transcript: 'https://storage.googleapis.com/aws-media/speech.txt',
+        startTime: new Date().getTime(),
+        endTime: new Date().getTime(),
+      });
+      this.stateData.setCompleted();
+
+    } else {
 
     const fn = this.instance.getTranscriptionJob.bind(this.instance);
 
@@ -263,10 +357,10 @@ class Transcribe extends BaseAnalysis {
     } else {
       this.stateData.setProgress(this.stateData.progress + 1);
     }
+  }
 
     return this.stateData.toJSON();
   }
-
 
   /**
    * @function collectJobResults
@@ -274,7 +368,36 @@ class Transcribe extends BaseAnalysis {
    */
   async collectJobResults(...args) {
     const data = ((this.stateData.input || {})[Transcribe.Keyword] || {});
-    const output = await this.copyTranscripts(data.transcript);
+
+    // Peter 20200514
+    let output = '';
+    console.log('***peter data.transcript: ' + data.transcript);
+
+    if (data.transcript.includes('google')) {
+      const buffer = await this.downloadHTTP(data.transcript);
+      const speechData = buffer.toString();
+
+      console.log('***peter speechData: ' + speechData);
+
+      const prefix = this.makeOutputPrefix();
+
+      await Promise.all([
+        CommonUtils.upload({
+          Bucket: Environment.Proxy.Bucket,
+          Key: PATH.join(prefix, 'output.txt'),
+          ContentType: 'text/plain',
+          ContentDisposition: 'attachment; filename="output.txt"',
+          ServerSideEncryption: 'AES256',
+          Body: speechData,
+        })
+      ]);
+
+      output = PATH.join(prefix, 'output.txt');
+
+    } else {
+
+      output = await this.copyTranscripts(data.transcript);
+    }
 
     this.stateData.setData(Transcribe.Keyword, {
       name: data.name,
@@ -293,6 +416,15 @@ class Transcribe extends BaseAnalysis {
    * @description convert JSON result into subtitle track
    */
   async createTrack() {
+
+    // Peter 20200515
+    const aiOptions = (this.stateData.input || {}).aiOptions;
+    console.log('***peter langCode in Create Track: ' + aiOptions.languageCode);
+    if(aiOptions.languageCode.slice(0, 2) === 'de') {
+      this.stateData.setCompleted();
+      return this.stateData.toJSON();
+    }
+
     const track = new WebVttTrack(WebVttTrack.Constants.UnitInSeconds);
     const data = ((this.stateData.input || {})[Transcribe.Keyword] || {});
     const {

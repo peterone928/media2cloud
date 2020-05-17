@@ -117,6 +117,28 @@
         }
       ],
       "Extension": "m4a"
+    },
+    {
+      "ContainerSettings": {
+        "Container": "RAW"
+      },
+      "AudioDescriptions": [
+        {
+          "AudioTypeControl": "FOLLOW_INPUT",
+          "AudioSourceName": "##PLACEHOLDER",
+          "CodecSettings": {
+            "Codec": "WAV",
+            "WavSettings": {
+              "BitDepth": 16,
+              "Channels": 1,
+              "SampleRate": 48000,
+              "Format": "RIFF"
+            }
+          },
+          "LanguageCodeControl": "FOLLOW_INPUT"
+        }
+      ],
+      "Extension": "wav"
     }
   ],
   "OutputGroupSettings": {

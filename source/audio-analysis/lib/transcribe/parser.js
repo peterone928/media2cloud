@@ -28,13 +28,20 @@ const {
 class Parser {
   constructor(transcript) {
     if (!(transcript || {}).items) {
-      throw new AnalysisError('missing transcript.items');
-    }
+      // Peter 20200514
+      //throw new AnalysisError('missing transcript.items');
+      this.$items = [];
+      this.$current = undefined;
+      this.$begin = 0;
+      this.$end = 0;
+      
+    } else {
 
-    this.$items = transcript.items;
-    this.$current = transcript.items.shift();
-    this.$begin = 0;
-    this.$end = this.$current.alternatives[0].content.length;
+      this.$items = transcript.items;
+      this.$current = transcript.items.shift();
+      this.$begin = 0;
+      this.$end = this.$current.alternatives[0].content.length;
+    }
   }
 
   get [Symbol.toStringTag]() {
@@ -90,7 +97,10 @@ class Parser {
       }
       this.end = this.begin + this.current.alternatives[0].content.length;
     }
-    throw new AnalysisError(`failed to find begin time with offset = ${offset}`);
+
+    // Just return 0 if cannot find beginTime
+    //throw new AnalysisError(`failed to find begin time with offset = ${offset}`);
+    return 0;
   }
 
   offsetToEndTime(offset) {
@@ -110,7 +120,10 @@ class Parser {
       }
       this.end = this.begin + this.current.alternatives[0].content.length;
     }
-    throw new AnalysisError(`failed to find end time with offset = ${offset}`);
+
+    // Just return 0 if cannot find beginTime
+    //throw new AnalysisError(`failed to find end time with offset = ${offset}`);
+    return 0;
   }
 }
 
