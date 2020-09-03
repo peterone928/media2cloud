@@ -202,8 +202,9 @@ class Transcribe extends BaseAnalysis {
 
     // Peter 20200514 - treat german as cantonese
     if (aiOptions.languageCode.slice(0, 2) === 'de') {
-      name = 'google-speech-job';
+      name = 'infotalk-speech-job';
       console.log('running ' + name);
+
       /*
       const AWS = require('aws-sdk');
       const fs = require('fs');
@@ -211,75 +212,38 @@ class Transcribe extends BaseAnalysis {
         apiVersion: '2006-03-01',
         signatureVersion: 'v4',
       });
+      */
       const s3Bucket = Environment.Proxy.Bucket;
       const s3Key = ((this.stateData.input || {}).audio || {}).key;
 
-      console.log('Audio wave file S3 key: ' + s3Key);
+      console.log('Audio wave file S3 file: ' + s3Bucket + '/' + s3Key);
 
-      let localFile = fs.createWriteStream('/tmp/' + s3Key);
-
-      s3.getObject({
-        s3Bucket,
-        s3Key,
-      }).createReadStream()
-      .pipe(localFile);
-
-      // Peter - get google auth json++
-      let gcpKeyFile = fs.createWriteStream('/tmp/' + 'gcpKey');
-      let gcpS3Bucket = 'media2cloud-peter';
-      let gcpS3Key = 'google/rocktracking-82e2283912da.json';
-      s3.getObject({
-        gcpS3Bucket,
-        gcpS3Key,
-      }).createReadStream()
-      .pipe(gcpKeyFile);
-
-      const gcpAccountId = 259801262735;
-      const gcpAuthJson = '/tmp/' + 'gcpKey';
-      // Peter - end--
-
-      const { Storage } = require('@google-cloud/storage');
-      const storage = new Storage({
-        gcpAccountId, gcpAuthJson
+      // Peter call infotalk job
+      const axios = require('axios');
+      const myParas = JSON.stringify({ 
+        "action": "submit", 
+        "bucket": s3Bucket, 
+        "key": s3Key.replace('.m4a', '.wav'), 
+        "lang": "zh-HK" 
       });
-      const gcsBucket = storage.bucket('aws-media');
 
-      gcsBucket.uploadAsync('/tmp/' + s3Key, { public: false })
-        .then(file => {
-          console.log('file: ' + s3Key + ' uploaded success to Google Cloud Storage!');
+      const myResp = await axios({
+        method: 'post',
+        url: 'https://dludx8z8w5.execute-api.ap-northeast-1.amazonaws.com/Prod/infotalk',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: myParas
+      });
 
-          const speech = require('@google-cloud/speech');
-          const speechClient = new speech.SpeechClient({
-            gcpAccountId, gcpAuthJson
-          });
-          const gcsUri = 'gs://aws-media/' + s3Key;
-          const audio = {
-            uri: gcsUri,
-          };
-          const config = {
-            //encoding: 'LINEAR16',
-            //sampleRateHertz: 16000,
-            languageCode: 'zh-HK'
-          };
-          const request = {
-            audio: audio,
-            config: config
-          };
-
-          const [operation] = await speechClient.longRunningRecognize(request);
-
-          name = JSON.stringify(operation.name);
-          console.log('Google speech to text job ID: ' + name);
-        })
-        .catch(err => {
-          console.error('file uploaded failed to Google Cloud Storage!');
-          throw new Error(err);
-        });
-
-        */
+      if(myResp.status == 200) {
+        name = 'infotalk:' + myResp.data.job_id;
+      } else {
+        throw new AnalysisError('fail to submit job to infotalk');
+      }
 
     } else {
-      
+
       /* optional: set vocabulary */
       if ((await this.useCustomVocabulary(aiOptions.customVocabulary, params.LanguageCode))) {
         params.Settings = {
@@ -316,48 +280,78 @@ class Transcribe extends BaseAnalysis {
     if (!name) {
       throw new AnalysisError(`missing input.${Transcribe.Keyword}.name`);
 
-    // Peter 20200514
-    } else if (name.includes('google')) {
-      this.stateData.setData(Transcribe.Keyword, {
-        transcript: 'https://storage.googleapis.com/aws-media/speech.txt',
-        startTime: new Date().getTime(),
-        endTime: new Date().getTime(),
+      // Peter 20200903
+    } else if (name.includes('infotalk')) {
+      const infotalkJobId = name.split(':')[1];
+      
+      // Peter call infotalk job
+      const axios = require('axios');
+      const myParas = JSON.stringify({
+        "jobId": infotalkJobId,
+        "s3Bucket": Environment.Proxy.Bucket,
+        "s3Prefix": "infotalk"
       });
-      this.stateData.setCompleted();
+
+      const myResp = await axios({
+        method: 'post',
+        url: 'https://dludx8z8w5.execute-api.ap-northeast-1.amazonaws.com/Prod/infotalk',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: myParas
+      });
+
+      if(myResp.status == 200) {
+        if(myResp.data.status == 'COMPLETED') {
+          this.stateData.setData(Transcribe.Keyword, {
+            transcript: myResp.data.TranscriptFileUri,
+            startTime: new Date().getTime(),
+            endTime: new Date().getTime(),
+          });
+
+          this.stateData.setCompleted();
+        } else {
+          this.stateData.setProgress(this.stateData.progress + 1);
+        }
+
+      } else {
+        throw new AnalysisError('fail to get job status from infotalk');
+      }
+      // Peter ended
 
     } else {
 
-    const fn = this.instance.getTranscriptionJob.bind(this.instance);
+      const fn = this.instance.getTranscriptionJob.bind(this.instance);
 
-    const response = await Retry.run(fn, {
-      TranscriptionJobName: name,
-    }).catch((e) => {
-      throw new AnalysisError(`(${name}) ${e.message}`);
-    });
-
-    if (!(response || {}).TranscriptionJob) {
-      throw new AnalysisError(`(${name}) fail to get transcription status`);
-    }
-
-    const status =
-      Transcribe.TranscribeStatusMapping[response.TranscriptionJob.TranscriptionJobStatus];
-    console.log(`${response.TranscriptionJob.TranscriptionJobStatus} -> ${status}`);
-
-    if (status === StateData.Statuses.Error) {
-      throw new AnalysisError(response.TranscriptionJob.FailureReason);
-    }
-
-    if (status === StateData.Statuses.Completed) {
-      this.stateData.setData(Transcribe.Keyword, {
-        transcript: response.TranscriptionJob.Transcript.TranscriptFileUri,
-        startTime: new Date(response.TranscriptionJob.CreationTime).getTime(),
-        endTime: new Date(response.TranscriptionJob.CompletionTime).getTime(),
+      const response = await Retry.run(fn, {
+        TranscriptionJobName: name,
+      }).catch((e) => {
+        throw new AnalysisError(`(${name}) ${e.message}`);
       });
-      this.stateData.setCompleted();
-    } else {
-      this.stateData.setProgress(this.stateData.progress + 1);
+
+      if (!(response || {}).TranscriptionJob) {
+        throw new AnalysisError(`(${name}) fail to get transcription status`);
+      }
+
+      const status =
+        Transcribe.TranscribeStatusMapping[response.TranscriptionJob.TranscriptionJobStatus];
+      console.log(`${response.TranscriptionJob.TranscriptionJobStatus} -> ${status}`);
+
+      if (status === StateData.Statuses.Error) {
+        throw new AnalysisError(response.TranscriptionJob.FailureReason);
+      }
+
+      if (status === StateData.Statuses.Completed) {
+        this.stateData.setData(Transcribe.Keyword, {
+          transcript: response.TranscriptionJob.Transcript.TranscriptFileUri,
+          startTime: new Date(response.TranscriptionJob.CreationTime).getTime(),
+          endTime: new Date(response.TranscriptionJob.CompletionTime).getTime(),
+        });
+        this.stateData.setCompleted();
+      } else {
+        this.stateData.setProgress(this.stateData.progress + 1);
+      }
     }
-  }
 
     return this.stateData.toJSON();
   }
@@ -420,7 +414,7 @@ class Transcribe extends BaseAnalysis {
     // Peter 20200515
     const aiOptions = (this.stateData.input || {}).aiOptions;
     console.log('***peter langCode in Create Track: ' + aiOptions.languageCode);
-    if(aiOptions.languageCode.slice(0, 2) === 'de') {
+    if (aiOptions.languageCode.slice(0, 2) === 'xx') {
       this.stateData.setCompleted();
       return this.stateData.toJSON();
     }

@@ -1,10 +1,11 @@
 {
   "name": "m2c-audio-analysis",
-  "version": "2.1.5",
+  "version": "2.2.1",
   "description": "media2cloud audio analysis workflow",
   "main": "index.js",
   "private": true,
   "dependencies": {
+    "axios": "^0.20.0",
     "tar": "^4.4.10"
   },
   "scripts": {

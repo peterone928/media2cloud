@@ -547,10 +547,6 @@ class BaseComprehend extends BaseAnalysis {
    * @description download json transcript
    */
   async downloadJsonTranscript() {
-    // Peter
-    if((this.stateData.input.aiOptions.languageCode || 'en').slice(0, 2) === 'de') {
-      return {};
-    }
 
     const bucket = Environment.Proxy.Bucket;
     const data = this.stateData.input.transcribe || {};
