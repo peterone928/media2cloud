@@ -31,10 +31,12 @@ where
 * **MY_BUCKET_BASENAME** is the basename of your bucket
 * **\<aws-region\>** is where you are testing the customized solution.
 
-For instance, create a bucket named as **my-media2cloud-eu-west-1** where your bucket basename will be **my-media2cloud**
+For instance, create a bucket named as **my-media2cloud-ap-northeast-1** where your bucket basename will be **my-media2cloud**
 
-Also, the templates and packages stored in this bucket should be publicly accessible.
-
+To create the bucket, run the following command in AWS CLI:
+```
+aws s3 mb s3://my-media2cloud-ap-northeast-1
+```
 
 * Now build the distributable:
 ```
@@ -43,7 +45,7 @@ bash ./build-s3-dist.sh --bucket MY_BUCKET_BASENAME
 
 * Deploy the distributable to an Amazon S3 bucket in your account. _Note:_ you must have the AWS Command Line Interface installed.
 ```
-bash ./deploy-s3-dist.sh --bucket MY_BUCKET_BASENAME --region eu-west-1
+bash ./deploy-s3-dist.sh --bucket MY_BUCKET_BASENAME --region ap-northeast-1
 ```
 
 * Get the link of the media2cloud-deploy.template uploaded to your Amazon S3 bucket.
