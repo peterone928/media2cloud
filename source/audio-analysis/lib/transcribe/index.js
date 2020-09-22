@@ -25,6 +25,9 @@ const HTTPS = require('https');
 const PATH = require('path');
 const CRYPTO = require('crypto');
 
+// The infotalk api gateway endpoint for cantonese transcribe
+const InfotalkEndpoint = 'https://dludx8z8w5.execute-api.ap-northeast-1.amazonaws.com/Prod/infotalk';
+
 const {
   Environment,
   StateData,
@@ -229,7 +232,7 @@ class Transcribe extends BaseAnalysis {
 
       const myResp = await axios({
         method: 'post',
-        url: 'https://dludx8z8w5.execute-api.ap-northeast-1.amazonaws.com/Prod/infotalk',
+        url: InfotalkEndpoint,
         headers: {
           'Content-Type': 'application/json'
         },
@@ -294,7 +297,7 @@ class Transcribe extends BaseAnalysis {
 
       const myResp = await axios({
         method: 'post',
-        url: 'https://dludx8z8w5.execute-api.ap-northeast-1.amazonaws.com/Prod/infotalk',
+        url: InfotalkEndpoint,
         headers: {
           'Content-Type': 'application/json'
         },
